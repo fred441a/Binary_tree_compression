@@ -1,49 +1,44 @@
 #include <string>
 #include <map>
-#include <stdio.h>
 #include <iostream>
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#include <sstream>
+#include <fstream>
+#include <vector>
 
-
-void CountWords (std::map<std::string, int> &PtrMap,char* FileChunk){
-		static char wordBuffer[428];
-		static int wordIndex;
-		int i = 0;
-		while(FileChunk[i]){
-				if(FileChunk[i] < 0){
-						PtrMap[std::string(wordBuffer)] ++;
-						std::cout << wordBuffer << ":" << PtrMap[std::string(wordBuffer)] << "\n";
-						break;
-				}
-				if(FileChunk[i] == ' '){
-						wordBuffer[wordIndex] = 0;
-						wordIndex = 0;
-						PtrMap[std::string(wordBuffer)] ++;
-						std::cout << wordBuffer << ":" << PtrMap[std::string(wordBuffer)] << "\n";
-				}else{
-						wordBuffer[wordIndex] = FileChunk[i];
-						wordIndex++;
-				}
-				i++;
-		}
-
-}
-
-
-void Compress(char* path){
+void Compress(char* path, char* output){
 		//open file
-		FILE *InputFile = std::fopen(path,"r+");
-		//create buffer to read file into
-		char buffer[100];
-		// read the first 100 characters of file into buffer
-		size_t sizeLeft = fread(buffer,sizeof(*buffer),ARRAY_SIZE(buffer),InputFile);
-		//if the file is over 100 characters (it probably is) keep reading until theres is less then 100 left
-		std::map<std::string, int> WordCount;
-		while(sizeLeft == 100){
-				CountWords(WordCount, buffer);
-				sizeLeft = fread(buffer,sizeof(*buffer),ARRAY_SIZE(buffer),InputFile);
+		std::ifstream InputFile (path);
+		// make map of all words in file, and how often they are used
+		std::map<std::string, uint32_t> WordMap;
+		uint16_t UID = 1;
+		//give each word an id and write it to file.
+		std::vector<uint16_t> CompressedText;
+		for(std::string sentence; std::getline(InputFile,sentence);){
+				std::stringstream sentenceStream(sentence);
+				for(std::string word; std::getline(sentenceStream,word,' ');){
+						if(WordMap[word] == 0){
+							WordMap[word]= UID;
+							UID++;
+						}
+						CompressedText.insert(CompressedText.end(),WordMap[word]);
+				}
 		}
-		CountWords(WordCount,buffer);
+		std::ofstream OutputFile(output);
+		//save wordId's in file
+		for(auto const& word: WordMap){
+				OutputFile.write((char*)&word.first,word.first.size()-1);
+				OutputFile << " ";
+				OutputFile.write((char*)&word.second,sizeof(word.second));
+		}
+		//make seperator
+		uint8_t seperator[2] = {255,255};
+		OutputFile.write((char*)seperator,2);
+		for(int i=0; i < CompressedText.size();i++){
+				OutputFile.write((char*)&CompressedText[i],sizeof(UID));
+		}
+
+		OutputFile.close();
+		InputFile.close();
 }
 
 
@@ -58,10 +53,10 @@ void Uncompress(std::string path){
 
 int main(int argc, char *argv[]){
 
-	if(argc > 2){
+	if(argc > 3){
 
 		if( std::string(argv[1])  == "-C"){
-				Compress(argv[2]);
+				Compress(argv[2],argv[3]);
 				return 0;
 		}
 		if( std::string(argv[1]) == "-U"){
